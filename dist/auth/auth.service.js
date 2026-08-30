@@ -7,7 +7,7 @@ var __decorate = (this && this.__decorate) || function (decorators, target, key,
 var __metadata = (this && this.__metadata) || function (k, v) {
     if (typeof Reflect === "object" && typeof Reflect.metadata === "function") return Reflect.metadata(k, v);
 };
-import { Injectable, ConflictException } from '@nestjs/common';
+import { Injectable, ConflictException, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
@@ -47,6 +47,34 @@ let AuthService = class AuthService {
         return {
             status: 'success',
             message: 'User registered successfully',
+            data: {
+                user: userWithoutPassword,
+                tokens: {
+                    accessToken,
+                    refreshToken,
+                },
+            },
+        };
+    }
+    async login(loginDto) {
+        const { email, password } = loginDto;
+        const user = await this.prisma.user.findUnique({
+            where: { email },
+        });
+        if (!user) {
+            throw new UnauthorizedException('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+        }
+        const isPasswordValid = await argon2.verify(user.password, password);
+        if (!isPasswordValid) {
+            throw new UnauthorizedException('البريد الإلكتروني أو كلمة المرور غير صحيحة');
+        }
+        const payload = { sub: user.id, email: user.email };
+        const accessToken = this.jwtService.sign(payload);
+        const refreshToken = this.jwtService.sign(payload, { expiresIn: '7d' });
+        const { password: _, ...userWithoutPassword } = user;
+        return {
+            status: 'success',
+            message: 'تم تسجيل الدخول بنجاح',
             data: {
                 user: userWithoutPassword,
                 tokens: {
